@@ -1,6 +1,6 @@
 const axios = require('axios')
 const _ = require('lodash')
-const {extractFromHTML} = require('./scrap.js')
+const { extractFromHTML } = require('./scrap.js')
 
 const URI = require('./url.json').url
 const timeout = (time) => new Promise(resolve => setTimeout(resolve, time))
@@ -26,23 +26,22 @@ const searchPage = (term = '', p, opts = {}, includeMaxPage) => {
     }
 
     if (!p) reject(new Error('[Nyaapi]: No page number was given on search page demand.'))
-
     axios.get(URI, {
       params: {
         f: opts.filter || 0,
         c: opts.category || '1_0',
         q: term,
         p: p,
-        s: opts.sort || 'id',
+        s: opts.sort || 'downloads',
         o: opts.direction || 'desc'
       }
     })
-      .then(({data}) => {
+      .then(({ data }) => {
         const results = extractFromHTML(data, includeMaxPage)
 
         resolve(results)
       })
-      .catch(/* istanbul ignore next */ (err) => reject(err))
+      .catch(/* istanbul ignore next */(err) => reject(err))
   })
 }
 
@@ -55,6 +54,10 @@ const searchPage = (term = '', p, opts = {}, includeMaxPage) => {
  *
  * @returns {promise}
  */
+
+const sleep = (ms) => {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 
 const searchAll = (term = '', opts = {}) => {
   return new Promise(async (resolve, reject) => {
@@ -72,10 +75,15 @@ const searchAll = (term = '', opts = {}) => {
       const { results: fResults, maxPage } = await searchPage(term, 1, opts, true)
       const searchs = []
       for (let page = 2; page <= maxPage; ++page) {
-        const makeSearch = () =>
-          searchPage(term, page, opts)
-            .catch(e => timeout(1000).then(makeSearch))
-        searchs.push(makeSearch())
+        const makeSearch = async () => {
+          try {
+            if (opts.throttle) await sleep(1000)
+            await searchPage(term, page, opts)
+          } catch (e) {
+            timeout(1000).then(makeSearch)
+          }
+          searchs.push(makeSearch())
+        }
       }
 
       const results = await Promise.all(searchs)
@@ -172,12 +180,12 @@ const searchByUserAndByPage = (user = null, term = '', p = null, n = null, opts 
         p
       }
     })
-      .then(({data}) => {
+      .then(({ data }) => {
         const results = extractFromHTML(data)
 
         resolve(results.slice(0, n || results.length))
       })
-      .catch(/* istanbul ignore next */ (err) => reject(err))
+      .catch(/* istanbul ignore next */(err) => reject(err))
   })
 }
 
